@@ -7,22 +7,10 @@ const path = require('path');
 
 const app = express();
 
-// 🔒 [환경 감지 패치] 로컬 환경과 클라우드(Render) 환경을 자동으로 감지합니다.
-let server;
-if (fs.existsSync(path.join(__dirname, 'key.pem')) && fs.existsSync(path.join(__dirname, 'cert.pem'))) {
-    // 내 컴퓨터에서 돌릴 때: 인증서가 있으므로 안전한 로컬 HTTPS 서버 가동
-    const https = require('https');
-    const options = {
-        key: fs.readFileSync(path.join(__dirname, 'key.pem')),
-        cert: fs.readFileSync(path.join(__dirname, 'cert.pem'))
-    };
-    server = https.createServer(options, app);
-    console.log("🔒 [LOCAL] 자체 인증서 기반 HTTPS 모드로 가동됩니다.");
-} else {
-    // Render 클라우드에 올렸을 때: 인증서 파일이 없으므로 일반 HTTP 서버 가동 (Render가 겉면을 HTTPS로 감싸줌)
-    server = http.createServer(app);
-    console.log("🌐 [CLOUD] Render 인프라 호환형 HTTP 모드로 가동됩니다.");
-}
+// 🌐 [클라우드 강제 패치] Render 인프라와의 완벽한 호환을 위해 무조건 HTTP 모드로 가동합니다.
+// (Render 자체 인프라가 겉면을 HTTPS 보안 연결로 안전하게 감싸줍니다.)
+let server = http.createServer(app);
+console.log("🌐 [CLOUD] Render 인프라 호환형 HTTP 모드로 가동됩니다.");
 
 // 웹소켓 CORS 설정 통합
 const io = new Server(server, { 
@@ -502,9 +490,9 @@ io.on('connection', (socket) => {
     });
 });
 
-// 🌐 [포트 바인딩 핵심 패치] Render 인프라가 지정하는 동적 포트(`process.env.PORT`)를 최우선으로 수용합니다.
+// 🌐 [포트 바인딩 핵심 패치] Render 인프라 호환을 위해 호스트 IP('0.0.0.0')를 제거하고 포트만 단독 바인딩합니다.
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
     console.log(`====================================================`);
     console.log(`🚀 마피아 호스팅 네트워크 엔진 활성화 완료.`);
     console.log(`📡 현재 바인딩된 네트워크 포트 번호: [ ${PORT} ]`);
