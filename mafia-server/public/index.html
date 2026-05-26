@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>온라인 마피아 게임</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #121212; color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background-color: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.7); width: 540px; text-align: center; box-sizing: border-box; }
+        
+        .container.ingame-wide { width: 950px; display: flex; gap: 20px; text-align: left; transition: 0.3s; }
+        .game-main-zone { flex: 1.2; display: flex; flex-direction: column; }
+        .game-side-zone { flex: 0.8; background-color: #252525; border-radius: 8px; padding: 15px; border: 1px solid #444; display: flex; flex-direction: column; }
+
+        input, select { padding: 10px; margin: 8px 0; border: none; border-radius: 5px; font-size: 15px; background-color: #333; color: white; box-sizing: border-box; }
+        #username-input, #room-code-input { width: 85%; }
+        button { width: 85%; padding: 11px; margin: 5px 0; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        .btn-create { background-color: #e50914; color: white; }
+        .btn-join { background-color: #2196F3; color: white; }
+        .btn-start { background-color: #4CAF50; color: white; display: none; margin-top: 15px; width: 100%; } 
+        .hidden { display: none !important; }
+        
+        ul { list-style-type: none; padding: 0; text-align: left; max-height: 120px; overflow-y: auto; margin: 5px 0; }
+        li { padding: 8px 12px; background-color: #2a2a2a; margin-bottom: 5px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .master-badge { color: #ffeb3b; font-size: 11px; border: 1px solid #ffeb3b; padding: 1px 4px; border-radius: 3px; }
+        
+        .host-settings { background-color: #282828; padding: 15px; border-radius: 8px; margin-top: 15px; text-align: left; border: 1px solid #444; }
+        .host-settings h3 { margin-top: 0; color: #ffeb3b; font-size: 15px; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+        .setting-row select { padding: 4px; margin: 0; }
+        .setting-row input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+
+        .chat-box { background-color: #0f0f0f; border-radius: 6px; height: 160px; overflow-y: auto; text-align: left; padding: 12px; font-size: 13px; margin-top: 15px; border: 1px solid #333; line-height: 1.5; }
+        .chat-input-row { display: flex; margin-top: 8px; gap: 5px; }
+        .chat-input-row input { flex: 1; margin: 0; padding: 10px; border-radius: 5px; }
+        .chat-input-row button { width: 75px; margin: 0; padding: 10px; font-size: 14px; background-color: #444; color: white; }
+
+        .game-header { background-color: #2d2d2d; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 14px; }
+        .status-night { background-color: #3f51b5; color: white; } 
+        .status-day { background-color: #ff9800; color: black; } 
+        .my-role-box { font-size: 18px; font-weight: bold; margin: 0 0 15px 0; padding: 10px; border-radius: 6px; text-align: center; background-color: #222; border-left: 5px solid #fff; }
+        
+        .role-mafia { color: #ff3d00; border-color: #ff3d00 !important; }
+        .role-chameleon { color: #00e5ff; border-color: #00e5ff !important; } /* 카멜레온 하늘색 지정 */
+        .role-doctor { color: #00e676; border-color: #00e676 !important; }
+        .role-police { color: #29b6f6; border-color: #29b6f6 !important; }
+        .role-citizen { color: #eceff1; border-color: #eceff1 !important; }
+        .role-jester { color: #ba68c8; border-color: #ba68c8 !important; } 
+        .role-reporter { color: #ffeb3b; border-color: #ffeb3b !important; } 
+
+        .action-box { background-color: #2a2a2a; padding: 12px; border-radius: 6px; margin-top: 15px; text-align: left; border: 1px solid #444; }
+        .action-box h4 { margin: 0 0 8px 0; color: #ffeb3b; font-size: 14px; }
+
+        .note-title { color: #2196F3; font-size: 16px; margin: 0 0 10px 0; font-weight: bold; border-bottom: 2px solid #2196F3; padding-bottom: 5px; }
+        .note-textarea { width: 100%; height: 100%; min-height: 340px; background-color: #1a1a1a; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 12px; font-size: 14px; line-height: 1.6; resize: none; box-sizing: border-box; }
+        
+        /* 🦎 카멜레온 전용 스킬 오버레이 유포창 */
+        .chameleon-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .chameleon-modal-content { background: #222; border: 3px solid #00e5ff; border-radius: 10px; padding: 25px; width: 400px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="main-container">
+    <div id="lobby-menu" style="width: 100%;">
+        <h2>🕵️‍♂️ 온라인 마피아</h2>
+        <input type="text" id="username-input" placeholder="사용할 닉네임 입력">
+        <hr style="border: 0.5px solid #333; margin: 20px 0;">
+        <button class="btn-create" onclick="createRoom()">새로운 방 만들기</button>
+        <p style="margin: 8px 0; color: #aaa; font-size: 14px;">또는</p>
+        <input type="text" id="room-code-input" placeholder="6자리 방 코드 입력">
+        <button class="btn-join" onclick="joinRoom()">방 코드로 입장하기</button>
+    </div>
+
+    <div id="waiting-room" class="hidden" style="width: 100%;">
+        <h2>대기실 (<span id="display-room-code" style="color: #2196F3;">------</span>)</h2>
+        <p style="color: #aaa; text-align: left; font-size: 13px; margin-bottom: 5px;">플레이어 목록 (<span id="player-count">0</span>명)</p>
+        <ul id="player-list"></ul>
+
+        <div class="host-settings">
+            <h3>⚙️ 게임 룸 설정 <span id="settings-lock-msg" style="font-size:11px; color:#aaa; font-weight:normal;"></span></h3>
+            <div class="setting-row">
+                <label>최대 입장 인원:</label>
+                <select id="max-players" onchange="sendSettings()">
+                    <option value="2">2명 (테스트)</option>
+                    <option value="4">4명</option>
+                    <option value="6">6명</option>
+                    <option value="8" selected>8명</option>
+                </select>
+            </div>
+            
+            <div class="setting-row">
+                <label>직업군 세팅 수 조정:</label>
+                <div style="display:flex; flex-wrap:wrap; gap:5px; width:60%; justify-content: flex-end;">
+                    <select id="count-mafia" onchange="sendSettings()"><option value="1">🕵️마피아 1</option><option value="2">🕵️마피아 2</option></select>
+                    <select id="count-chameleon" onchange="sendSettings()"><option value="0" selected>🦎카멜레온 0</option><option value="1">🦎카멜레온 1</option></select>
+                    <select id="count-doctor" onchange="sendSettings()"><option value="1">💉의사 1</option></select>
+                    <select id="count-police" onchange="sendSettings()"><option value="1">🚨경찰 1</option><option value="0">❌경찰 0</option></select>
+                    <select id="count-jester" onchange="sendSettings()"><option value="0" selected>🤡제스터 0</option><option value="1">🤡제스터 1</option></select>
+                    <select id="count-reporter" onchange="sendSettings()"><option value="0" selected>📰기자 0</option><option value="1">📰기자 1</option></select>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label style="color: #ff9800; font-weight: bold;">도배 금지 (1초 제한):</label>
+                <input type="checkbox" id="anti-spam" onchange="sendSettings()">
+            </div>
+        </div>
+
+        <div class="chat-box" id="lobby-chat-box">
+            <div style="color:#888;">[시스템] 대기실 대화창이 활성화되었습니다.</div>
+        </div>
+        <div class="chat-input-row">
+            <input type="text" id="lobby-chat-msg" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter') sendChat('lobby')">
+            <button onclick="sendChat('lobby')">전송</button>
+        </div>
+
+        <button id="start-game-btn" class="btn-start" onclick="startGame()">게임 시작</button>
+        <p id="wait-message" style="color: #aaa; margin-top: 12px; font-size:14px;">방장이 게임을 준비 중입니다...</p>
+    </div>
+
+    <div id="game-left-area" class="game-main-zone hidden">
+        <div class="game-header">
+            <div>방 코드: <strong id="game-room-code" style="color:#2196F3;">------</strong></div>
+            <div id="game-status-badge" class="status-badge status-night">🌙 밤</div>
+        </div>
+
+        <div id="my-role-display" class="my-role-box">
+            나의 직업: <span id="my-role-text">확인 중...</span>
+        </div>
+
+        <p style="color: #aaa; text-align: left; font-size: 13px; margin: 0 0 5px 0;">생존자 명단</p>
+        <ul id="game-player-list"></ul>
+
+        <div id="ability-box" class="action-box hidden">
+            <h4 id="ability-title">🔮 능력 사용 단계</h4>
+            <select id="ability-target-select" style="width:100%; padding:6px; background-color:#444; border-radius:4px;"></select>
+            <div style="display:flex; gap:5px; margin-top:8px;">
+                <button class="btn-join" id="submit-ability-btn" style="width:100%; margin:0; padding:8px; font-size:14px;" onclick="useActiveAbility()">지목 완료</button>
+                <button class="btn-create" id="skip-ability-btn" style="width:100%; margin:0; padding:8px; font-size:14px; background-color:#666; display:none;" onclick="skipReporterTurn()">기사 패스</button>
+            </div>
+        </div>
+
+        <div id="vote-box" class="action-box hidden">
+            <h4 style="color: #ff9800;">⚖️ 낮 처형 투표</h4>
+            <p style="font-size: 12px; color: #ccc; margin: 0 0 5px 0;">토론 후 의심되는 마피아에게 투표하세요.</p>
+            <select id="vote-target-select" style="width:100%; padding:6px; background-color:#444; border-radius:4px;"></select>
+            <button class="btn-create" id="submit-vote-btn" style="width:100%; margin-top:8px; padding:8px; font-size:14px; background-color:#ff9800; color:black;" onclick="useDayVote()">투표하기</button>
+        </div>
+
+        <div class="chat-box" id="game-chat-box" style="height: 180px;"></div>
+        
+        <div class="chat-input-row" id="game-chat-input-zone">
+            <input type="text" id="game-chat-msg" placeholder="대화창 상태 변경 중..." onkeydown="if(event.key==='Enter') sendChat('game')">
+            <button onclick="sendChat('game')">전송</button>
+        </div>
+    </div>
+
+    <div id="game-right-area" class="game-side-zone hidden">
+        <h3 class="note-title">🔍 플레이어 추리 노트</h3>
+        <p style="font-size: 12px; color: #bbb; margin: 0 0 10px 0; line-height: 1.4;">
+            ※ 나만 볼 수 있는 비밀 메모장입니다.<br>생존자들의 의심스러운 정황과 대화록을 기록하세요.
+        </p>
+        <textarea class="note-textarea" id="deduction-note-pad" placeholder="[추리 노트 예시]&#10;- 김철수: 낮에 화를 냄 (마피아 의심)&#10;- 이영희: 의사 판정 나옴..."></textarea>
+    </div>
+</div>
+
+<div id="chameleon-skill-modal" class="chameleon-modal hidden">
+    <div class="chameleon-modal-content">
+        <h3 style="color:#00e5ff; margin-top:0;">🦎 카멜레온 신분 복제 발동</h3>
+        <p style="font-size:13px; color:#ddd; line-height:1.4;">
+            축하합니다! 밤 엄살 암살에 완전히 성공했습니다.<br>
+            이름을 맞바꿔 교란시킬 **생존자 1명**을 선택하세요.
+        </p>
+        <select id="chameleon-target-select" style="width:100%; margin:10px 0; padding:8px;"></select>
+        <button class="btn-join" style="background-color:#00e5ff; color:#000; width:100%; margin-top:5px;" onclick="submitChameleonExchange()">닉네임 강제 교환하기</button>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    let myUsername = "";
+    let currentRoomId = "";
+    let amIHost = false;
+    let myRole = ""; 
+    let isAlive = true;
+    let currentStatus = "waiting";
+
+    function createRoom() {
+        myUsername = document.getElementById('username-input').value.trim();
+        if (!myUsername) return alert('닉네임을 입력해주세요!');
+        socket.emit('createRoom', { username: myUsername });
+    }
+
+    socket.on('roomCreated', ({ roomId }) => {
+        currentRoomId = roomId;
+        socket.emit('joinRoom', { roomId, username: myUsername });
+    });
+
+    function joinRoom() {
+        myUsername = document.getElementById('username-input').value.trim();
+        const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+        if (!myUsername) return alert('닉네임을 입력해주세요!');
+        if (code.length !== 6) return alert('올바른 6자리 방 코드를 입력해주세요!');
+        
+        currentRoomId = code;
+        socket.emit('joinRoom', { roomId: code, username: myUsername });
+    }
+
+    function sendSettings() {
+        if (!amIHost) return;
+        const settings = {
+            maxPlayers: parseInt(document.getElementById('max-players').value),
+            mafiaCount: parseInt(document.getElementById('count-mafia').value),
+            chameleonCount: parseInt(document.getElementById('count-chameleon').value),
+            doctorCount: parseInt(document.getElementById('count-doctor').value),
+            policeCount: parseInt(document.getElementById('count-police').value),
+            jesterCount: parseInt(document.getElementById('count-jester').value),
+            reporterCount: parseInt(document.getElementById('count-reporter').value),
+            antiSpam: document.getElementById('anti-spam').checked
+        };
+        socket.emit('updateSettings', { roomId: currentRoomId, settings });
+    }
+
+    socket.on('settingsUpdated', (settings) => {
+        if (amIHost) return;
+        document.getElementById('max-players').value = settings.maxPlayers;
+        document.getElementById('count-mafia').value = settings.mafiaCount;
+        document.getElementById('count-chameleon').value = settings.chameleonCount || 0;
+        document.getElementById('count-doctor').value = settings.doctorCount;
+        document.getElementById('count-police').value = settings.policeCount;
+        document.getElementById('count-jester').value = settings.jesterCount;
+        document.getElementById('count-reporter').value = settings.reporterCount;
+        document.getElementById('anti-spam').checked = settings.antiSpam;
+    });
+
+    socket.on('roomData', (room) => {
+        if (room.status !== 'waiting') return;
+
+        document.getElementById('lobby-menu').classList.add('hidden');
+        document.getElementById('waiting-room').classList.remove('hidden');
+        
+        document.getElementById('game-left-area').classList.add('hidden');
+        document.getElementById('game-right-area').classList.add('hidden');
+        document.getElementById('main-container').classList.remove('ingame-wide');
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+        
+        document.getElementById('display-room-code').innerText = room.id;
+        document.getElementById('player-count').innerText = room.players.length;
+
+        const playerList = document.getElementById('player-list');
+        playerList.innerHTML = ''; 
+
+        amIHost = (room.masterId === socket.id);
+
+        room.players.forEach(player => {
+            const li = document.createElement('li');
+            li.innerText = player.username;
+            if (player.isMaster) {
+                const badge = document.createElement('span');
+                badge.className = 'master-badge';
+                badge.innerText = '방장';
+                li.appendChild(badge);
+            }
+            playerList.appendChild(li);
+        });
+
+        const elements = ['max-players', 'count-mafia', 'count-chameleon', 'count-doctor', 'count-police', 'count-jester', 'count-reporter', 'anti-spam'];
+        elements.forEach(id => document.getElementById(id).disabled = !amIHost);
+        
+        document.getElementById('settings-lock-msg').innerText = amIHost ? "(제어 가능)" : "(방장만 변경 가능)";
+        document.getElementById('start-game-btn').style.display = amIHost ? 'block' : 'none';
+        document.getElementById('wait-message').style.display = amIHost ? 'none' : 'block';
+    });
+
+    function sendChat(type) {
+        const inputId = type === 'lobby' ? 'lobby-chat-msg' : 'game-chat-msg';
+        const msgInput = document.getElementById(inputId);
+        const message = msgInput.value.trim();
+        if (!message) return;
+
+        if (type === 'game' && currentStatus === 'night' && myRole !== 'mafia' && myRole !== 'chameleon') {
+            msgInput.value = '';
+            return;
+        }
+
+        socket.emit('sendMessage', { roomId: currentRoomId, message, username: myUsername, type });
+        msgInput.value = '';
+    }
+
+    socket.on('receiveMessage', ({ username, message, type, isSecret }) => {
+        const boxId = type === 'lobby' ? 'lobby-chat-box' : 'game-chat-box';
+        const box = document.getElementById(boxId);
+        if (box) {
+            if (isSecret) {
+                box.innerHTML += `<div style="color: #ff3d00; font-weight: bold; background-color: #2b110b; padding: 3px 6px; border-radius: 4px; margin: 2px 0;">${username}: ${message}</div>`;
+            } else {
+                box.innerHTML += `<div><strong>${username}:</strong> ${message}</div>`;
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+    });
+
+    socket.on('systemMessage', (msg) => {
+        ['lobby-chat-box', 'game-chat-box'].forEach(id => {
+            const box = document.getElementById(id);
+            if(box) {
+                box.innerHTML += `<div style="color:#ff9800; font-weight:bold;">[알림] ${msg}</div>`;
+                box.scrollTop = box.scrollHeight;
+            }
+        });
+    });
+
+    function startGame() {
+        socket.emit('startGame', { roomId: currentRoomId });
+    }
+
+    socket.on('assignRole', ({ role }) => {
+        myRole = role;
+        const roleTextMap = { mafia: '마피아 🕵️', chameleon: '카멜레온 🦎', doctor: '의사 💉', police: '경찰 🚨', citizen: '시민 🧍', jester: '제스터 🤡', reporter: '기자 📰' };
+        const displayEl = document.getElementById('my-role-display');
+        const textEl = document.getElementById('my-role-text');
+        
+        textEl.innerText = roleTextMap[role];
+        displayEl.className = `my-role-box role-${role}`;
+    });
+
+    socket.on('gameStarted', ({ status, players, cooldowns }) => {
+        document.getElementById('waiting-room').classList.add('hidden');
+        
+        document.getElementById('game-left-area').classList.remove('hidden');
+        document.getElementById('game-right-area').classList.remove('hidden');
+        document.getElementById('main-container').className = "container ingame-wide";
+        
+        document.getElementById('game-room-code').innerText = currentRoomId;
+        
+        const box = document.getElementById('game-chat-box');
+        box.innerHTML = `<div style="color:#4caf50;">[게임 시작] 첫 번째 밤이 찾아왔습니다.</div>`;
+        document.getElementById('deduction-note-pad').value = "";
+
+        updateInGamePlayerList(players);
+        setupNightTurn(players, cooldowns);
+    });
+
+    function updateInGamePlayerList(players) {
+        const list = document.getElementById('game-player-list');
+        list.innerHTML = '';
+        
+        const me = players.find(p => p.id === socket.id);
+        if (me) {
+            isAlive = me.isAlive;
+            myUsername = me.username; // 이름 변장 시 내 로컬 캐시 변수도 강제 갱신
+        }
+
+        players.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = p.username;
+            
+            if (!p.isAlive) {
+                li.style.textDecoration = 'line-through';
+                li.style.color = '#888';
+                li.innerHTML += ` <span style="color:#ff3d00; font-size:12px;">(사망)</span>`;
+            } else if (p.id === socket.id) {
+                li.innerHTML += ` <span style="color:#4caf50; font-size:12px;">(나)</span>`;
+            }
+            list.appendChild(li);
+        });
+    }
+
+    function setupNightTurn(players, cooldowns) {
+        currentStatus = "night";
+        document.getElementById('vote-box').classList.add('hidden'); 
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+
+        const badge = document.getElementById('game-status-badge');
+        badge.innerText = "🌙 밤";
+        badge.className = "status-badge status-night";
+
+        if (isAlive && (myRole === 'mafia' || myRole === 'chameleon')) {
+            document.getElementById('game-chat-msg').placeholder = "[마피아 비밀 회의] 동료들과 자유롭게 암살을 계획하세요...";
+            document.getElementById('game-chat-msg').disabled = false;
+        } else {
+            document.getElementById('game-chat-msg').placeholder = "밤에는 조용히 행동을 선택해야 합니다...";
+            document.getElementById('game-chat-msg').disabled = true;
+        }
+
+        if (!isAlive) return;
+
+        const abilityBox = document.getElementById('ability-box');
+        const targetSelect = document.getElementById('ability-target-select');
+        const title = document.getElementById('ability-title');
+        const skipBtn = document.getElementById('skip-ability-btn');
+        
+        skipBtn.style.display = "none"; 
+
+        if (myRole !== 'citizen' && myRole !== 'jester') {
+            abilityBox.classList.remove('hidden');
+            targetSelect.disabled = false;
+            document.getElementById('submit-ability-btn').disabled = false;
+            
+            if (myRole === 'mafia' || myRole === 'chameleon') title.innerText = "🕵️ 마피아 공동 집행: 오늘 밤 살해할 주민을 저격하세요";
+            if (myRole === 'doctor') title.innerText = "💉 의사 치료: 살려낼 대상을 고르세요";
+            if (myRole === 'police') title.innerText = "🚨 경찰 사살: 마피아로 의심되는 대상을 쏘세요";
+            
+            if (myRole === 'reporter') {
+                skipBtn.style.display = "block"; 
+                const myCooldown = cooldowns ? cooldowns[socket.id] : 0;
+                
+                if (myCooldown > 0) {
+                    title.innerText = `📰 기자 취재 쿨다운 중 (앞으로 ${myCooldown}턴 취재 불가)`;
+                    targetSelect.disabled = true;
+                    document.getElementById('submit-ability-btn').disabled = true;
+                    skipBtn.style.display = "none";
+                    socket.emit('reporterSkip', { roomId: currentRoomId });
+                    return;
+                } else {
+                    title.innerText = "📰 기자 특종: 직업을 공개할 타겟을 고르세요";
+                }
+            }
+
+            targetSelect.innerHTML = '';
+            players.forEach(p => {
+                if (p.isAlive) {
+                    if (myRole === 'reporter' && p.id === socket.id) return;
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.innerText = p.username;
+                    targetSelect.appendChild(opt);
+                }
+            });
+        } else {
+            abilityBox.classList.add('hidden');
+        }
+    }
+
+    function useActiveAbility() {
+        const targetId = document.getElementById('ability-target-select').value;
+        if(!targetId) return;
+
+        let eventName = "";
+        if (myRole === 'mafia' || myRole === 'chameleon') eventName = 'mafiaAction'; // 카멜레온도 마피아 행동 공유
+        if (myRole === 'doctor') eventName = 'doctorAction';
+        if (myRole === 'police') eventName = 'policeAction';
+        if (myRole === 'reporter') eventName = 'reporterAction';
+
+        if(eventName) {
+            socket.emit(eventName, { roomId: currentRoomId, targetId });
+            document.getElementById('ability-target-select').disabled = true;
+            document.getElementById('submit-ability-btn').disabled = true;
+            document.getElementById('skip-ability-btn').style.display = "none";
+        }
+    }
+
+    function skipReporterTurn() {
+        socket.emit('reporterSkip', { roomId: currentRoomId });
+        document.getElementById('ability-target-select').disabled = true;
+        document.getElementById('submit-ability-btn').disabled = true;
+        document.getElementById('skip-ability-btn').style.display = "none";
+    }
+
+    // 🦎 카멜레온 스킬 당첨 팝업 노출 트리거 수신
+    socket.on('chameleonSkillTrigger', ({ players }) => {
+        const modal = document.getElementById('chameleon-skill-modal');
+        const select = document.getElementById('chameleon-target-select');
+        
+        select.innerHTML = '';
+        players.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.innerText = p.username;
+            select.appendChild(opt);
+        });
+
+        modal.classList.remove('hidden'); // 팝업창 오픈
+    });
+
+    function submitChameleonExchange() {
+        const targetId = document.getElementById('chameleon-target-select').value;
+        if (!targetId) return;
+
+        socket.emit('chameleonExchangeName', { roomId: currentRoomId, targetId });
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+    }
+
+    // ☀️ 낮 세팅 연동
+    socket.on('dayStarted', ({ status, message, reporterNews, players, cooldowns }) => {
+        currentStatus = "day";
+        document.getElementById('ability-box').classList.add('hidden'); 
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+
+        const badge = document.getElementById('game-status-badge');
+        badge.innerText = "☀️ 낮";
+        badge.className = "status-badge status-day";
+
+        updateInGamePlayerList(players);
+
+        const box = document.getElementById('game-chat-box');
+        box.innerHTML += `<div style="color:#ffdd00; background-color:#2c2205; padding:8px; border-radius:5px; margin:8px 0; white-space: pre-wrap; border: 1px solid #ff9800;">🔔 [밤 결과 보고]\n${message}</div>`;
+        
+        if (reporterNews) {
+            box.innerHTML += `<div style="color:#ffffff; background-color:#4a3b00; padding:10px; border-radius:5px; margin:8px 0; white-space: pre-wrap; border: 2px dashed #ffeb3b;">${reporterNews}</div>`;
+        }
+        box.scrollTop = box.scrollHeight;
+
+        if (isAlive) {
+            document.getElementById('game-chat-msg').placeholder = "메시지를 입력하여 토론에 참여하세요...";
+            document.getElementById('game-chat-msg').disabled = false;
+
+            const voteBox = document.getElementById('vote-box');
+            const voteSelect = document.getElementById('vote-target-select');
+            
+            voteBox.classList.remove('hidden');
+            document.getElementById('submit-vote-btn').disabled = false;
+            voteSelect.disabled = false;
+
+            voteSelect.innerHTML = '<option value="skip">⏩ 투표 건너뛰기</option>';
+            players.forEach(p => {
+                if (p.isAlive) {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.innerText = p.username;
+                    voteSelect.appendChild(opt);
+                }
+            });
+        } else {
+            document.getElementById('game-chat-msg').placeholder = "사망자는 관전만 가능합니다.";
+            document.getElementById('game-chat-msg').disabled = true;
+        }
+    });
+
+    function useDayVote() {
+        const targetId = document.getElementById('vote-target-select').value;
+        if (!targetId) return;
+
+        socket.emit('dayVote', { roomId: currentRoomId, targetId });
+        document.getElementById('vote-target-select').disabled = true;
+        document.getElementById('submit-vote-btn').disabled = true;
+    }
+
+    socket.on('voteProgress', ({ voterName, targetName }) => {
+        const box = document.getElementById('game-chat-box');
+        box.innerHTML += `<div style="color:#aaa;">🗳️ [ ${voterName} ] 님이 [ ${targetName} ] 에게 투표 완료.</div>`;
+        box.scrollTop = box.scrollHeight;
+    });
+
+    socket.on('nightStarted', ({ status, message, players, cooldowns }) => {
+        updateInGamePlayerList(players);
+
+        const box = document.getElementById('game-chat-box');
+        box.innerHTML += `<div style="color:#e0e0e0; background-color:#252525; padding:8px; border-radius:5px; margin:8px 0; white-space: pre-wrap; border: 1px solid #555;">📢 [투표 결과 발표]\n${message}</div>`;
+        box.scrollTop = box.scrollHeight;
+
+        setupNightTurn(players, cooldowns); 
+    });
+
+    socket.on('gameOver', ({ winner, winnerName }) => {
+        if (winner === 'jester') {
+            alert(`🤡 [게임 파국] 제스터 단독 승리!\n\n제스터 [ ${winnerName} ] 님이 처형되었습니다.`);
+        } else {
+            const winnerKorean = winner === 'mafia' ? '마피아 🕵️' : '시민 🧍';
+            alert(`🎉 게임 종료!\n\n최종 승리 진영: [ ${winnerKorean} ] 팀`);
+        }
+        location.reload();
+    });
+
+    socket.on('errorMessage', (msg) => alert(msg));
+</script>
+</body>
+</html>
