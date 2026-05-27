@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -10,92 +9,67 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(express.static('public'));
 
 const rooms = {};
-const roomActions = {};
-const roomVotes = {};
-const lastMessageTime = {};
 
+// 유틸: 방 코드 생성
 function generateRoomCode() {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code;
     do {
-        code = '';
-        for (let i = 0; i < 6; i++) {
-            code += characters.charAt(Math.floor(Math.random() * characters.length));
-        }
+        code = Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     } while (rooms[code]);
     return code;
 }
 
 io.on('connection', (socket) => {
+    console.log(`[연결] Socket ID: ${socket.id}`);
+
+    // 방 생성
     socket.on('createRoom', ({ username }) => {
         const roomId = generateRoomCode();
         rooms[roomId] = {
             id: roomId, players: [], status: 'waiting', masterId: socket.id,
-            settings: { maxPlayers: 8, mafiaCount: 1, doctorCount: 1, policeCount: 1, saboteurCount: 1 }
+            settings: { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1 } // 마피아 0, 카멜레온 1 고정
         };
         socket.emit('roomCreated', { roomId });
     });
 
+    // 방 입장
     socket.on('joinRoom', ({ roomId, username }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('errorMessage', '방이 없습니다.');
+        if (!room) return socket.emit('errorMessage', '방이 존재하지 않습니다.');
         if (room.players.find(p => p.id === socket.id)) return;
 
         socket.join(roomId);
-        room.players.push({ id: socket.id, username, role: null, isAlive: true, isMaster: room.masterId === socket.id, canVote: true });
+        room.players.push({ id: socket.id, username, role: null, isAlive: true });
         
         io.to(roomId).emit('roomData', room);
-        io.to(roomId).emit('receiveMessage', { username: '시스템', message: `[ ${username} ] 님이 접속했습니다.`, type: 'system' });
     });
 
+    // 게임 시작 및 직업 분배 최적화
     socket.on('startGame', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
         
         room.status = 'night';
         const players = room.players;
-        const { mafiaCount, doctorCount, policeCount, saboteurCount } = room.settings;
         
-        const roles = [];
-        for (let i = 0; i < mafiaCount; i++) roles.push('mafia');
-        for (let i = 0; i < doctorCount; i++) roles.push('doctor');
-        for (let i = 0; i < policeCount; i++) roles.push('police');
-        for (let i = 0; i < saboteurCount; i++) roles.push('saboteur');
+        // 직업 카드 풀 구성
+        const roles = ['chameleon']; 
         while (roles.length < players.length) roles.push('citizen');
         roles.sort(() => Math.random() - 0.5);
 
+        // 직업 할당 및 전송
         players.forEach((p, i) => {
-            p.role = roles[i];
+            p.role = roles[i] || 'citizen';
             p.isAlive = true;
-            p.canVote = true; // 투표권 초기화
+            console.log(`[할당] ${p.username}: ${p.role}`);
             io.to(p.id).emit('assignRole', { role: p.role });
         });
 
         io.to(roomId).emit('gameStarted', { status: room.status, players: room.players });
     });
 
-    // 방해꾼 액션: 투표권 박탈
-    socket.on('saboteurAction', ({ roomId, targetId }) => {
-        if (!roomActions[roomId]) roomActions[roomId] = {};
-        roomActions[roomId].saboteurTarget = targetId;
-        // 밤 결과 연산 로직으로 연결
-    });
-
-    // 투표 이벤트 (방해꾼 능력 적용)
-    socket.on('dayVote', ({ roomId, targetId }) => {
-        const room = rooms[roomId];
-        const voter = room.players.find(p => p.id === socket.id);
-        
-        // 투표권 확인
-        if (!voter || !voter.canVote) {
-            return socket.emit('errorMessage', '당신은 방해꾼의 저주로 투표할 수 없습니다!');
-        }
-
-        if (!roomVotes[roomId]) roomVotes[roomId] = {};
-        roomVotes[roomId][socket.id] = targetId;
-        io.to(roomId).emit('voteProgress', { voterName: voter.username });
-    });
-
+    // 퇴장 처리
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
@@ -111,4 +85,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => console.log(`서버 가동 중: 포트 ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 서버 가동 중: ${PORT}`));
