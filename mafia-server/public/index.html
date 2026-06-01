@@ -42,7 +42,7 @@
         .my-role-box { font-size: 18px; font-weight: bold; margin: 0 0 15px 0; padding: 10px; border-radius: 6px; text-align: center; background-color: #222; border-left: 5px solid #fff; }
         
         .role-mafia { color: #ff3d00; border-color: #ff3d00 !important; }
-        .role-chameleon { color: #00e5ff; border-color: #00e5ff !important; } /* 카멜레온 하늘색 지정 */
+        .role-chameleon { color: #00e5ff; border-color: #00e5ff !important; } 
         .role-doctor { color: #00e676; border-color: #00e676 !important; }
         .role-police { color: #29b6f6; border-color: #29b6f6 !important; }
         .role-citizen { color: #eceff1; border-color: #eceff1 !important; }
@@ -55,7 +55,6 @@
         .note-title { color: #2196F3; font-size: 16px; margin: 0 0 10px 0; font-weight: bold; border-bottom: 2px solid #2196F3; padding-bottom: 5px; }
         .note-textarea { width: 100%; height: 100%; min-height: 340px; background-color: #1a1a1a; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 12px; font-size: 14px; line-height: 1.6; resize: none; box-sizing: border-box; }
         
-        /* 🦎 카멜레온 전용 스킬 오버레이 유포창 */
         .chameleon-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .chameleon-modal-content { background: #222; border: 3px solid #00e5ff; border-radius: 10px; padding: 25px; width: 400px; text-align: center; }
     </style>
@@ -93,8 +92,13 @@
             <div class="setting-row">
                 <label>직업군 세팅 수 조정:</label>
                 <div style="display:flex; flex-wrap:wrap; gap:5px; width:60%; justify-content: flex-end;">
-                    <select id="count-mafia" onchange="sendSettings()"><option value="1">🕵️마피아 1</option><option value="2">🕵️마피아 2</option></select>
-                    <select id="count-chameleon" onchange="sendSettings()"><option value="0" selected>🦎카멜레온 0</option><option value="1">🦎카멜레온 1</option></select>
+                    <!-- 🛠 마피아 0명 선택지 추가 및 기본 선택(selected) 설정 -->
+                    <select id="count-mafia" onchange="sendSettings()">
+                        <option value="0" selected>🕵️마피아 0</option>
+                        <option value="1">🕵️마피아 1</option>
+                        <option value="2">🕵️마피아 2</option>
+                    </select>
+                    <select id="count-chameleon" onchange="sendSettings()"><option value="0">🦎카멜레온 0</option><option value="1" selected>🦎카멜레온 1</option></select>
                     <select id="count-doctor" onchange="sendSettings()"><option value="1">💉의사 1</option></select>
                     <select id="count-police" onchange="sendSettings()"><option value="1">🚨경찰 1</option><option value="0">❌경찰 0</option></select>
                     <select id="count-jester" onchange="sendSettings()"><option value="0" selected>🤡제스터 0</option><option value="1">🤡제스터 1</option></select>
@@ -159,7 +163,7 @@
     <div id="game-right-area" class="game-side-zone hidden">
         <h3 class="note-title">🔍 플레이어 추리 노트</h3>
         <p style="font-size: 12px; color: #bbb; margin: 0 0 10px 0; line-height: 1.4;">
-            ※ 나만 볼 수 있는 비밀 메모장입니다.<br>생존자들의 의심스러운 정황과 대화록을 기록하세요.
+            ※ 나만 볼 수 있는 비밀 메모장입니다.<br>생존자들의 의심스러운 정황 and 대화록을 기록하세요.
         </p>
         <textarea class="note-textarea" id="deduction-note-pad" placeholder="[추리 노트 예시]&#10;- 김철수: 낮에 화를 냄 (마피아 의심)&#10;- 이영희: 의사 판정 나옴..."></textarea>
     </div>
@@ -169,7 +173,7 @@
     <div class="chameleon-modal-content">
         <h3 style="color:#00e5ff; margin-top:0;">🦎 카멜레온 신분 복제 발동</h3>
         <p style="font-size:13px; color:#ddd; line-height:1.4;">
-            축하합니다! 밤 엄살 암살에 완전히 성공했습니다.<br>
+            축하합니다! 밤 암살에 완전히 성공했습니다.<br>
             이름을 맞바꿔 교란시킬 **생존자 1명**을 선택하세요.
         </p>
         <select id="chameleon-target-select" style="width:100%; margin:10px 0; padding:8px;"></select>
@@ -350,7 +354,7 @@
         const me = players.find(p => p.id === socket.id);
         if (me) {
             isAlive = me.isAlive;
-            myUsername = me.username; // 이름 변장 시 내 로컬 캐시 변수도 강제 갱신
+            myUsername = me.username; 
         }
 
         players.forEach(p => {
@@ -439,7 +443,7 @@
         if(!targetId) return;
 
         let eventName = "";
-        if (myRole === 'mafia' || myRole === 'chameleon') eventName = 'mafiaAction'; // 카멜레온도 마피아 행동 공유
+        if (myRole === 'mafia' || myRole === 'chameleon') eventName = 'mafiaAction'; 
         if (myRole === 'doctor') eventName = 'doctorAction';
         if (myRole === 'police') eventName = 'policeAction';
         if (myRole === 'reporter') eventName = 'reporterAction';
@@ -459,7 +463,6 @@
         document.getElementById('skip-ability-btn').style.display = "none";
     }
 
-    // 🦎 카멜레온 스킬 당첨 팝업 노출 트리거 수신
     socket.on('chameleonSkillTrigger', ({ players }) => {
         const modal = document.getElementById('chameleon-skill-modal');
         const select = document.getElementById('chameleon-target-select');
@@ -472,7 +475,7 @@
             select.appendChild(opt);
         });
 
-        modal.classList.remove('hidden'); // 팝업창 오픈
+        modal.classList.remove('hidden'); 
     });
 
     function submitChameleonExchange() {
@@ -483,7 +486,6 @@
         document.getElementById('chameleon-skill-modal').classList.add('hidden');
     }
 
-    // ☀️ 낮 세팅 연동
     socket.on('dayStarted', ({ status, message, reporterNews, players, cooldowns }) => {
         currentStatus = "day";
         document.getElementById('ability-box').classList.add('hidden'); 

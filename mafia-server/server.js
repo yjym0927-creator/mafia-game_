@@ -23,12 +23,16 @@ function generateRoomCode() {
 io.on('connection', (socket) => {
     console.log(`[연결] Socket ID: ${socket.id}`);
 
-    // 방 생성
-    socket.on('createRoom', ({ username }) => {
+    // 방 생성 (클라이언트에서 설정값을 받도록 수정)
+    socket.on('createRoom', ({ username, settings }) => {
         const roomId = generateRoomCode();
         rooms[roomId] = {
-            id: roomId, players: [], status: 'waiting', masterId: socket.id,
-            settings: { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1 } // 마피아 0, 카멜레온 1 고정
+            id: roomId, 
+            players: [], 
+            status: 'waiting', 
+            masterId: socket.id,
+            // 클라이언트에서 settings를 보내면 적용, 없으면 기본값(마피아 0) 사용
+            settings: settings || { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1 } 
         };
         socket.emit('roomCreated', { roomId });
     });
@@ -45,7 +49,7 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('roomData', room);
     });
 
-    // 게임 시작 및 직업 분배 최적화
+    // 게임 시작 및 직업 분배 (설정값 기반 동적 분배)
     socket.on('startGame', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -53,9 +57,19 @@ io.on('connection', (socket) => {
         room.status = 'night';
         const players = room.players;
         
-        // 직업 카드 풀 구성
-        const roles = ['chameleon']; 
+        // 방의 설정값에서 마피아와 카멜레온 수를 가져옴
+        const { mafiaCount, chameleonCount } = room.settings;
+        
+        // 직업 카드 풀 동적 생성
+        const roles = [];
+        
+        for (let i = 0; i < mafiaCount; i++) roles.push('mafia');
+        for (let i = 0; i < chameleonCount; i++) roles.push('chameleon');
+        
+        // 나머지 부족한 인원은 전부 시민으로 채움
         while (roles.length < players.length) roles.push('citizen');
+        
+        // 직업 섞기
         roles.sort(() => Math.random() - 0.5);
 
         // 직업 할당 및 전송
