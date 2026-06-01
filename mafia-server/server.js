@@ -10,7 +10,6 @@ app.use(express.static('public'));
 
 const rooms = {};
 
-// 유틸: 방 코드 생성
 function generateRoomCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code;
@@ -21,80 +20,55 @@ function generateRoomCode() {
 }
 
 io.on('connection', (socket) => {
-    console.log(`[연결] Socket ID: ${socket.id}`);
-
-    // 방 생성 (클라이언트에서 설정값을 받도록 수정)
-    socket.on('createRoom', ({ username, settings }) => {
+    socket.on('createRoom', ({ username }) => {
         const roomId = generateRoomCode();
         rooms[roomId] = {
-            id: roomId, 
-            players: [], 
-            status: 'waiting', 
-            masterId: socket.id,
-            // 클라이언트에서 settings를 보내면 적용, 없으면 기본값(마피아 0) 사용
-            settings: settings || { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1 } 
+            id: roomId, players: [], status: 'waiting', masterId: socket.id,
+            settings: { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1, doctorCount: 0, policeCount: 0, jesterCount: 0, reporterCount: 0 }
         };
         socket.emit('roomCreated', { roomId });
     });
 
-    // 방 입장
     socket.on('joinRoom', ({ roomId, username }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('errorMessage', '방이 존재하지 않습니다.');
-        if (room.players.find(p => p.id === socket.id)) return;
-
         socket.join(roomId);
         room.players.push({ id: socket.id, username, role: null, isAlive: true });
-        
         io.to(roomId).emit('roomData', room);
     });
 
-    // 게임 시작 및 직업 분배 (설정값 기반 동적 분배)
+    // [핵심] 설정 변경 동기화
+    socket.on('updateSettings', ({ roomId, settings }) => {
+        if (rooms[roomId]) {
+            rooms[roomId].settings = settings;
+            io.to(roomId).emit('settingsUpdated', settings);
+        }
+    });
+
     socket.on('startGame', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
         
         room.status = 'night';
-        const players = room.players;
+        const s = room.settings;
+        let roles = [];
         
-        // 방의 설정값에서 마피아와 카멜레온 수를 가져옴
-        const { mafiaCount, chameleonCount } = room.settings;
+        // 설정값 기반 직업 리스트 생성
+        for(let i=0; i<s.mafiaCount; i++) roles.push('mafia');
+        for(let i=0; i<s.chameleonCount; i++) roles.push('chameleon');
+        for(let i=0; i<s.doctorCount; i++) roles.push('doctor');
+        for(let i=0; i<s.policeCount; i++) roles.push('police');
+        for(let i=0; i<s.jesterCount; i++) roles.push('jester');
+        for(let i=0; i<s.reporterCount; i++) roles.push('reporter');
         
-        // 직업 카드 풀 동적 생성
-        const roles = [];
-        
-        for (let i = 0; i < mafiaCount; i++) roles.push('mafia');
-        for (let i = 0; i < chameleonCount; i++) roles.push('chameleon');
-        
-        // 나머지 부족한 인원은 전부 시민으로 채움
-        while (roles.length < players.length) roles.push('citizen');
-        
-        // 직업 섞기
+        while (roles.length < room.players.length) roles.push('citizen');
         roles.sort(() => Math.random() - 0.5);
 
-        // 직업 할당 및 전송
-        players.forEach((p, i) => {
-            p.role = roles[i] || 'citizen';
-            p.isAlive = true;
-            console.log(`[할당] ${p.username}: ${p.role}`);
+        room.players.forEach((p, i) => {
+            p.role = roles[i];
             io.to(p.id).emit('assignRole', { role: p.role });
         });
-
         io.to(roomId).emit('gameStarted', { status: room.status, players: room.players });
-    });
-
-    // 퇴장 처리
-    socket.on('disconnect', () => {
-        for (const roomId in rooms) {
-            const room = rooms[roomId];
-            const idx = room.players.findIndex(p => p.id === socket.id);
-            if (idx !== -1) {
-                room.players.splice(idx, 1);
-                io.to(roomId).emit('roomData', room);
-                if (room.players.length === 0) delete rooms[roomId];
-                break;
-            }
-        }
     });
 });
 
