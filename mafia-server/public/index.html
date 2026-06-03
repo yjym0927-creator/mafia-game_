@@ -54,6 +54,9 @@
 
         .note-title { color: #2196F3; font-size: 16px; margin: 0 0 10px 0; font-weight: bold; border-bottom: 2px solid #2196F3; padding-bottom: 5px; }
         .note-textarea { width: 100%; height: 100%; min-height: 340px; background-color: #1a1a1a; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 12px; font-size: 14px; line-height: 1.6; resize: none; box-sizing: border-box; }
+        
+        .chameleon-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .chameleon-modal-content { background: #222; border: 3px solid #00e5ff; border-radius: 10px; padding: 25px; width: 400px; text-align: center; }
     </style>
 </head>
 <body>
@@ -132,22 +135,10 @@
         <p style="color: #aaa; text-align: left; font-size: 13px; margin: 0 0 5px 0;">생존자 명단</p>
         <ul id="game-player-list"></ul>
 
-        <!-- 🔮 밤 능력 사용 상자 -->
         <div id="ability-box" class="action-box hidden">
             <h4 id="ability-title">🔮 능력 사용 단계</h4>
-            
-            <!-- 1번째 타겟 영역 (공통 암살/조사/치료 투표용) -->
-            <div id="ability-target-zone-1">
-                <select id="ability-target-select" style="width:100%; padding:6px; background-color:#444; border-radius:4px;"></select>
-            </div>
-
-            <!-- 2번째 타겟 영역 (🦎 카멜레온 신분교환 전용) -->
-            <div id="chameleon-exchange-zone" class="hidden" style="margin-top:12px;">
-                <h4 style="color:#00e5ff; margin-bottom:4px;">🦎 신분 교환: 닉네임을 맞바꿔 교란할 유저 선택</h4>
-                <select id="chameleon-exchange-select" style="width:100%; padding:6px; background-color:#444; border-radius:4px; border: 1px solid #00e5ff;"></select>
-            </div>
-
-            <div style="display:flex; gap:5px; margin-top:12px;">
+            <select id="ability-target-select" style="width:100%; padding:6px; background-color:#444; border-radius:4px;"></select>
+            <div style="display:flex; gap:5px; margin-top:8px;">
                 <button class="btn-join" id="submit-ability-btn" style="width:100%; margin:0; padding:8px; font-size:14px;" onclick="useActiveAbility()">지목 완료</button>
                 <button class="btn-create" id="skip-ability-btn" style="width:100%; margin:0; padding:8px; font-size:14px; background-color:#666; display:none;" onclick="skipReporterTurn()">기사 패스</button>
             </div>
@@ -174,6 +165,18 @@
             ※ 나만 볼 수 있는 비밀 메모장입니다.<br>생존자들의 의심스러운 정황 and 대화록을 기록하세요.
         </p>
         <textarea class="note-textarea" id="deduction-note-pad" placeholder="[추리 노트 예시]&#10;- 김철수: 낮에 화를 냄 (마피아 의심)&#10;- 이영희: 의사 판정 나옴..."></textarea>
+    </div>
+</div>
+
+<div id="chameleon-skill-modal" class="chameleon-modal hidden">
+    <div class="chameleon-modal-content">
+        <h3 style="color:#00e5ff; margin-top:0;">🦎 카멜레온 신분 복제 발동</h3>
+        <p style="font-size:13px; color:#ddd; line-height:1.4;">
+            축하합니다! 밤 암살에 완전히 성공했습니다.<br>
+            이름을 맞바꿔 교란시킬 **생존자 1명**을 선택하세요.
+        </p>
+        <select id="chameleon-target-select" style="width:100%; margin:10px 0; padding:8px;"></select>
+        <button class="btn-join" style="background-color:#00e5ff; color:#000; width:100%; margin-top:5px;" onclick="submitChameleonExchange()">닉네임 강제 교환하기</button>
     </div>
 </div>
 
@@ -244,6 +247,7 @@
         document.getElementById('game-left-area').classList.add('hidden');
         document.getElementById('game-right-area').classList.add('hidden');
         document.getElementById('main-container').classList.remove('ingame-wide');
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
         
         document.getElementById('display-room-code').innerText = room.id;
         document.getElementById('player-count').innerText = room.players.length;
@@ -255,13 +259,47 @@
 
         room.players.forEach(player => {
             const li = document.createElement('li');
-            li.innerText = player.username;
+            
+            // 이름 영역 분리
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = player.username;
+            li.appendChild(nameSpan);
+
+            // 우측 배치 영역 (방장 뱃지 + 강퇴 버튼)
+            const rightZone = document.createElement('div');
+            rightZone.style.display = 'flex';
+            rightZone.style.alignItems = 'center';
+            rightZone.style.gap = '8px';
+
             if (player.isMaster) {
                 const badge = document.createElement('span');
                 badge.className = 'master-badge';
                 badge.innerText = '방장';
-                li.appendChild(badge);
+                rightZone.appendChild(badge);
             }
+
+            // [추가된 로직] 내가 방장이고 대상 유저가 본인이 아닐 때 '강퇴' 버튼 활성화
+            if (amIHost && player.id !== socket.id) {
+                const kickBtn = document.createElement('button');
+                kickBtn.innerText = '강퇴';
+                kickBtn.style.width = 'auto';
+                kickBtn.style.margin = '0';
+                kickBtn.style.padding = '3px 8px';
+                kickBtn.style.fontSize = '11px';
+                kickBtn.style.backgroundColor = '#e50914';
+                kickBtn.style.color = 'white';
+                kickBtn.style.borderRadius = '4px';
+                kickBtn.style.border = 'none';
+                kickBtn.style.cursor = 'pointer';
+                kickBtn.onclick = () => {
+                    if (confirm(`[${player.username}] 님을 정말로 강퇴하시겠습니까?`)) {
+                        socket.emit('kickPlayer', { roomId: currentRoomId, targetPlayerId: player.id });
+                    }
+                };
+                rightZone.appendChild(kickBtn);
+            }
+
+            li.appendChild(rightZone);
             playerList.appendChild(li);
         });
 
@@ -325,6 +363,23 @@
         displayEl.className = `my-role-box role-${role}`;
     });
 
+    socket.on('gameStarted', ({ status, players, cooldowns }) => {
+        document.getElementById('waiting-room').classList.add('hidden');
+        
+        document.getElementById('game-left-area').classList.remove('hidden');
+        document.getElementById('game-right-area').classList.remove('hidden');
+        document.getElementById('main-container').className = "container ingame-wide";
+        
+        document.getElementById('game-room-code').innerText = currentRoomId;
+        
+        const box = document.getElementById('game-chat-box');
+        box.innerHTML = `<div style="color:#4caf50;">[게임 시작] 첫 번째 밤이 찾아왔습니다.</div>`;
+        document.getElementById('deduction-note-pad').value = "";
+
+        updateInGamePlayerList(players);
+        setupNightTurn(players, cooldowns);
+    });
+
     function updateInGamePlayerList(players) {
         const list = document.getElementById('game-player-list');
         list.innerHTML = '';
@@ -350,28 +405,10 @@
         });
     }
 
-    socket.on('gameStarted', ({ status, players, cooldowns }) => {
-        document.getElementById('waiting-room').classList.add('hidden');
-        
-        document.getElementById('game-left-area').classList.remove('hidden');
-        document.getElementById('game-right-area').classList.remove('hidden');
-        document.getElementById('main-container').className = "container ingame-wide";
-        
-        document.getElementById('game-room-code').innerText = currentRoomId;
-        
-        const box = document.getElementById('game-chat-box');
-        box.innerHTML = `<div style="color:#4caf50;">[게임 시작] 첫 번째 밤이 찾아왔습니다.</div>`;
-        document.getElementById('deduction-note-pad').value = "";
-
-        updateInGamePlayerList(players);
-        setupNightTurn(players, cooldowns);
-    });
-
-    // 🌙 밤 정비 및 직업별 UI 세팅
     function setupNightTurn(players, cooldowns) {
         currentStatus = "night";
         document.getElementById('vote-box').classList.add('hidden'); 
-        document.getElementById('chameleon-exchange-zone').classList.add('hidden'); // 카멜레온 영역 초기화
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
 
         const badge = document.getElementById('game-status-badge');
         badge.innerText = "🌙 밤";
@@ -389,7 +426,6 @@
 
         const abilityBox = document.getElementById('ability-box');
         const targetSelect = document.getElementById('ability-target-select');
-        const exchangeSelect = document.getElementById('chameleon-exchange-select');
         const title = document.getElementById('ability-title');
         const skipBtn = document.getElementById('skip-ability-btn');
         
@@ -398,11 +434,9 @@
         if (myRole !== 'citizen' && myRole !== 'jester') {
             abilityBox.classList.remove('hidden');
             targetSelect.disabled = false;
-            exchangeSelect.disabled = false;
             document.getElementById('submit-ability-btn').disabled = false;
             
-            if (myRole === 'mafia') title.innerText = "🕵️ 마피아 암살 투표: 오늘 밤 살해할 주민을 저격하세요";
-            if (myRole === 'chameleon') title.innerText = "🦎 카멜레온 합동 작전: 제거할 주민 투표 및 신분 교환 진행";
+            if (myRole === 'mafia' || myRole === 'chameleon') title.innerText = "🕵️ 마피아 공동 집행: 오늘 밤 살해할 주민을 저격하세요";
             if (myRole === 'doctor') title.innerText = "💉 의사 치료: 살려낼 대상을 고르세요";
             if (myRole === 'police') title.innerText = "🚨 경찰 사살: 마피아로 의심되는 대상을 쏘세요";
             
@@ -422,7 +456,6 @@
                 }
             }
 
-            // 1번 선택 상자 (기본 공격/보호/조사 대상) 리스트업
             targetSelect.innerHTML = '';
             players.forEach(p => {
                 if (p.isAlive) {
@@ -433,27 +466,11 @@
                     targetSelect.appendChild(opt);
                 }
             });
-
-            // 🦎 카멜레온이라면 투표 상자 밑에 '신분 교환' 전용 선택 상자를 하나 더 활성화합니다.
-            if (myRole === 'chameleon') {
-                document.getElementById('chameleon-exchange-zone').classList.remove('hidden');
-                exchangeSelect.innerHTML = '<option value="skip">⏩ 이번 밤은 신분 교환 건너뛰기</option>';
-                players.forEach(p => {
-                    // 카멜레온은 '살아있는 다른 사람'과만 이름을 바꿀 수 있습니다.
-                    if (p.isAlive && p.id !== socket.id) {
-                        const opt = document.createElement('option');
-                        opt.value = p.id;
-                        opt.innerText = p.username;
-                        exchangeSelect.appendChild(opt);
-                    }
-                });
-            }
         } else {
             abilityBox.classList.add('hidden');
         }
     }
 
-    // 🔮 밤 능력 확정 단추
     function useActiveAbility() {
         const targetId = document.getElementById('ability-target-select').value;
         if(!targetId) return;
@@ -465,18 +482,7 @@
         if (myRole === 'reporter') eventName = 'reporterAction';
 
         if(eventName) {
-            // 1. 기본 마피아 투표나 다른 역할의 액션을 전송합니다.
             socket.emit(eventName, { roomId: currentRoomId, targetId });
-            
-            // 2. 카멜레온 직업이라면 두 번째 셀렉트 박스에서 정한 신분 교환 정보도 함께 서버에 전송합니다!
-            if (myRole === 'chameleon') {
-                const exchangeId = document.getElementById('chameleon-exchange-select').value;
-                // 암살 성공 여부와 무관하게 카멜레온의 선택 의사를 서버에 보냅니다.
-                socket.emit('chameleonAction', { roomId: currentRoomId, targetId: exchangeId });
-                document.getElementById('chameleon-exchange-select').disabled = true;
-            }
-
-            // UI 비활성화 처리
             document.getElementById('ability-target-select').disabled = true;
             document.getElementById('submit-ability-btn').disabled = true;
             document.getElementById('skip-ability-btn').style.display = "none";
@@ -490,9 +496,33 @@
         document.getElementById('skip-ability-btn').style.display = "none";
     }
 
+    socket.on('chameleonSkillTrigger', ({ players }) => {
+        const modal = document.getElementById('chameleon-skill-modal');
+        const select = document.getElementById('chameleon-target-select');
+        
+        select.innerHTML = '';
+        players.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.innerText = p.username;
+            select.appendChild(opt);
+        });
+
+        modal.classList.remove('hidden'); 
+    });
+
+    function submitChameleonExchange() {
+        const targetId = document.getElementById('chameleon-target-select').value;
+        if (!targetId) return;
+
+        socket.emit('chameleonExchangeName', { roomId: currentRoomId, targetId });
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+    }
+
     socket.on('dayStarted', ({ status, message, reporterNews, players, cooldowns }) => {
         currentStatus = "day";
         document.getElementById('ability-box').classList.add('hidden'); 
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
 
         const badge = document.getElementById('game-status-badge');
         badge.innerText = "☀️ 낮";
@@ -566,7 +596,30 @@
             const winnerKorean = winner === 'mafia' ? '마피아 🕵️' : '시민 🧍';
             alert(`🎉 게임 종료!\n\n최종 승리 진영: [ ${winnerKorean} ] 팀`);
         }
-        location.reload();
+        // 🛠️ 대기실 자동 복귀 로직을 기다리기 위해 location.reload(); 제거 완료!
+    });
+
+    // [추가] 서버로부터 '대기방 전환 명령'을 수신했을 때 화면 복귀 스크립트
+    socket.on('goToWaitingRoom', () => {
+        document.getElementById('lobby-menu').classList.add('hidden');
+        document.getElementById('waiting-room').classList.remove('hidden');
+        
+        document.getElementById('game-left-area').classList.add('hidden');
+        document.getElementById('game-right-area').classList.add('hidden');
+        document.getElementById('main-container').classList.remove('ingame-wide');
+        document.getElementById('chameleon-skill-modal').classList.add('hidden');
+        
+        // 인게임 요소 및 텍스트 폼 초기화
+        document.getElementById('game-chat-box').innerHTML = '';
+        document.getElementById('my-role-text').innerText = '확인 중...';
+        document.getElementById('my-role-display').className = 'my-role-box';
+        currentStatus = "waiting";
+    });
+
+    // [추가] 방장에 의해 추방(강퇴) 당했을 때 흐름 스크립트
+    socket.on('kicked', (message) => {
+        alert(message);
+        location.reload(); // 강퇴당한 유저는 메인 첫 화면으로 강제 새로고침 시킵니다.
     });
 
     socket.on('errorMessage', (msg) => alert(msg));
