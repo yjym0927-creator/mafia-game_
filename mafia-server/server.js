@@ -39,24 +39,35 @@ function checkWinConditions(room) {
     return false;
 }
 
-// 밤 능력 정산 시스템
+// 밤 능력 정산 시스템 (구조 개선)
 function processNightResolution(room) {
     let killedIds = new Set();
     let savedIds = new Set();
     let chatMessages = [];
     let reporterNews = "";
 
-    const mafiaTarget = room.actions.mafia;
-    const doctorTarget = room.actions.doctor;
-    const policeTarget = room.actions.police;
-    const reporterTarget = room.actions.reporter;
+    // 1. 의사 치료 적용 (살아있는 의사들의 선택 취합)
+    room.players.filter(p => p.isAlive && p.role === 'doctor').forEach(doc => {
+        const target = room.actions.doctor[doc.id];
+        if (target) savedIds.add(target);
+    });
 
-    // 1. 의사 치료 적용
-    if (doctorTarget) {
-        savedIds.add(doctorTarget);
-    }
+    // 2. 마피아/카멜레온 공격 적용 (마피아 투표 중 가장 많이 나온 타겟 선정)
+    const mafiaVotes = {};
+    room.players.filter(p => p.isAlive && (p.role === 'mafia' || p.role === 'chameleon')).forEach(maf => {
+        const target = room.actions.mafia[maf.id];
+        if (target) mafiaVotes[target] = (mafiaVotes[target] || 0) + 1;
+    });
 
-    // 2. 마피아/카멜레온 공격 적용
+    let mafiaTarget = null;
+    let maxMafiaVotes = 0;
+    Object.keys(mafiaVotes).forEach(tId => {
+        if (mafiaVotes[tId] > maxMafiaVotes) {
+            maxMafiaVotes = mafiaVotes[tId];
+            mafiaTarget = tId;
+        }
+    });
+
     if (mafiaTarget) {
         if (savedIds.has(mafiaTarget)) {
             chatMessages.push("의사의 극적인 치료로 밤새 아무도 사망하지 않았습니다.");
@@ -78,33 +89,37 @@ function processNightResolution(room) {
     }
 
     // 3. 경찰 사살/조사 적용
-    if (policeTarget) {
-        const targetPlayer = room.players.find(p => p.id === policeTarget);
-        if (targetPlayer && (targetPlayer.role === 'mafia' || targetPlayer.role === 'chameleon')) {
-            killedIds.add(policeTarget);
-            chatMessages.push(`정의로운 경찰의 저격으로 마피아 진영인 [ ${targetPlayer.username} ] 님이 사망하셨습니다.`);
-        } else if (targetPlayer) {
-            chatMessages.push(`경찰이 [ ${targetPlayer.username} ] 님을 사살하려 했으나 마피아가 아니었습니다.`);
-        }
-    }
-
-    // 4. 기자 특종 취재 적용
-    if (reporterTarget && !room.actions.reporterSkipped) {
-        const targetPlayer = room.players.find(p => p.id === reporterTarget);
-        if (targetPlayer) {
-            const roleKorean = {
-                mafia: '마피아 🕵️', chameleon: '카멜레온 🦎', doctor: '의사 💉', 
-                police: '경찰 🚨', citizen: '시민 🧍', jester: '제스터 🤡', reporter: '기자 📰'
-            }[targetPlayer.role] || '시민 🧍';
-            
-            reporterNews = `📰 [기자 특종] 밤샘 취재 결과, [ ${targetPlayer.username} ] 님의 진짜 직업은 [ ${roleKorean} ] 으로 밝혀졌습니다!`;
-            
-            const reporterPlayer = room.players.find(p => p.role === 'reporter' && p.isAlive);
-            if (reporterPlayer) {
-                room.cooldowns[reporterPlayer.id] = 2; // 취재 성공 시 2턴 쿨다운 설정
+    room.players.filter(p => p.isAlive && p.role === 'police').forEach(pol => {
+        const policeTarget = room.actions.police[pol.id];
+        if (policeTarget) {
+            const targetPlayer = room.players.find(p => p.id === policeTarget);
+            if (targetPlayer && (targetPlayer.role === 'mafia' || targetPlayer.role === 'chameleon')) {
+                killedIds.add(policeTarget);
+                chatMessages.push(`정의로운 경찰의 저격으로 마피아 진영인 [ ${targetPlayer.username} ] 님이 사망하셨습니다.`);
+            } else if (targetPlayer) {
+                chatMessages.push(`경찰이 [ ${targetPlayer.username} ] 님을 사살하려 했으나 마피아가 아니었습니다.`);
             }
         }
-    }
+    });
+
+    // 4. 기자 특종 취재 적용
+    room.players.filter(p => p.isAlive && p.role === 'reporter').forEach(rep => {
+        const reporterTarget = room.actions.reporter[rep.id];
+        const skipped = room.actions.reporterSkipped[rep.id];
+
+        if (reporterTarget && !skipped) {
+            const targetPlayer = room.players.find(p => p.id === reporterTarget);
+            if (targetPlayer) {
+                const roleKorean = {
+                    mafia: '마피아 🕵️', chameleon: '카멜레온 🦎', doctor: '의사 💉', 
+                    police: '경찰 🚨', citizen: '시민 🧍', jester: '제스터 🤡', reporter: '기자 📰'
+                }[targetPlayer.role] || '시민 🧍';
+                
+                reporterNews = `📰 [기자 특종] 밤샘 취재 결과, [ ${targetPlayer.username} ] 님의 진짜 직업은 [ ${roleKorean} ] 으로 밝혀졌습니다!`;
+                room.cooldowns[rep.id] = 2; // 취재 성공 시 2턴 쿨다운 설정
+            }
+        }
+    });
 
     // 사망 처리 확정
     killedIds.forEach(id => {
@@ -112,14 +127,15 @@ function processNightResolution(room) {
         if (p) p.isAlive = false;
     });
 
+    // 액션 저장소 초기화 구조 변경
     room.status = 'day';
-    room.actions = { mafia: null, doctor: null, police: null, reporter: null, reporterSkipped: false };
+    room.actions = { mafia: {}, doctor: {}, police: {}, reporter: {}, reporterSkipped: {} };
     room.votes = {};
 
     // 승리 조건 검사
     if (checkWinConditions(room)) return;
 
-    // 낮 시작 이벤트 전송 (index.html 수신용)
+    // 낮 시작 이벤트 전송
     io.to(room.id).emit('dayStarted', {
         status: 'day',
         message: chatMessages.join('\n'),
@@ -129,21 +145,26 @@ function processNightResolution(room) {
     });
 }
 
-// 밤 능력 상호작용 검사 함수
+// ⭐️ 밤 능력 상호작용 인원수 기반 완벽 검사 함수
 function checkNightActionsComplete(room) {
+    // 오직 '살아있는' 플레이어 기준으로만 체크
     const alivePlayers = room.players.filter(p => p.isAlive);
     
-    const needsMafia = alivePlayers.some(p => p.role === 'mafia' || p.role === 'chameleon');
-    const needsDoctor = alivePlayers.some(p => p.role === 'doctor');
-    const needsPolice = alivePlayers.some(p => p.role === 'police');
-    const needsReporter = alivePlayers.some(p => p.role === 'reporter' && (!room.cooldowns[p.id] || room.cooldowns[p.id] === 0));
+    const mafias = alivePlayers.filter(p => p.role === 'mafia' || p.role === 'chameleon');
+    const doctors = alivePlayers.filter(p => p.role === 'doctor');
+    const polices = alivePlayers.filter(p => p.role === 'police');
+    const reporters = alivePlayers.filter(p => p.role === 'reporter' && (!room.cooldowns[p.id] || room.cooldowns[p.id] === 0));
 
-    if (needsMafia && !room.actions.mafia) return false;
-    if (needsDoctor && !room.actions.doctor) return false;
-    if (needsPolice && !room.actions.police) return false;
-    if (needsReporter && !room.actions.reporter && !room.actions.reporterSkipped) return false;
+    // 살아있는 인원수만큼 누락 없이 행동(또는 스킵)이 수집되었는지 체크
+    const mafiaDone = mafias.every(p => room.actions.mafia[p.id]);
+    const doctorDone = doctors.every(p => room.actions.doctor[p.id]);
+    const policeDone = polices.every(p => room.actions.police[p.id]);
+    const reporterDone = reporters.every(p => room.actions.reporter[p.id] || room.actions.reporterSkipped[p.id]);
 
-    processNightResolution(room);
+    // 모든 살아있는 특수직업군이 행동을 완료했다면 정산으로 전환!
+    if (mafiaDone && doctorDone && policeDone && reporterDone) {
+        processNightResolution(room);
+    }
 }
 
 io.on('connection', (socket) => {
@@ -158,14 +179,14 @@ io.on('connection', (socket) => {
             status: 'waiting', 
             masterId: socket.id,
             settings: { maxPlayers: 8, mafiaCount: 0, chameleonCount: 1, doctorCount: 1, policeCount: 1, jesterCount: 0, reporterCount: 0, antiSpam: false },
-            actions: { mafia: null, doctor: null, police: null, reporter: null, reporterSkipped: false },
+            actions: { mafia: {}, doctor: {}, police: {}, reporter: {}, reporterSkipped: {} }, // 맵 형태로 구조 변경
             votes: {},
             cooldowns: {}
         };
         socket.emit('roomCreated', { roomId });
     });
 
-    // 2. 방 입장 (isMaster 누락 해결)
+    // 2. 방 입장
     socket.on('joinRoom', ({ roomId, username }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('errorMessage', '방이 존재하지 않습니다.');
@@ -173,14 +194,13 @@ io.on('connection', (socket) => {
 
         socket.join(roomId);
         
-        // index.html 호환을 위해 객체 안에 직접 isMaster를 명시해 줍니다.
         const isMaster = (room.players.length === 0 || room.masterId === socket.id);
         room.players.push({ id: socket.id, username, role: null, isAlive: true, isMaster: isMaster });
         
         io.to(roomId).emit('roomData', room);
     });
 
-    // 3. 설정 변경 동기화 (모든 유저 실시간 연동)
+    // 3. 설정 변경 동기화
     socket.on('updateSettings', ({ roomId, settings }) => {
         if (rooms[roomId]) {
             rooms[roomId].settings = settings;
@@ -188,7 +208,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 4. 게임 시작 및 정밀 직업 분배
+    // 4. 게임 시작
     socket.on('startGame', ({ roomId }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -197,7 +217,6 @@ io.on('connection', (socket) => {
         const s = room.settings;
         let roles = [];
         
-        // 룸 설정 기반 유연한 직업 배열 생성
         for(let i=0; i<(s.mafiaCount || 0); i++) roles.push('mafia');
         for(let i=0; i<(s.chameleonCount || 0); i++) roles.push('chameleon');
         for(let i=0; i<(s.doctorCount || 0); i++) roles.push('doctor');
@@ -205,9 +224,8 @@ io.on('connection', (socket) => {
         for(let i=0; i<(s.jesterCount || 0); i++) roles.push('jester');
         for(let i=0; i<(s.reporterCount || 0); i++) roles.push('reporter');
         
-        // 모자란 자리는 시민으로 채우기
         while (roles.length < room.players.length) roles.push('citizen');
-        roles.sort(() => Math.random() - 0.5); // 랜덤 셔플
+        roles.sort(() => Math.random() - 0.5);
 
         room.players.forEach((p, i) => {
             p.role = roles[i];
@@ -215,14 +233,14 @@ io.on('connection', (socket) => {
             io.to(p.id).emit('assignRole', { role: p.role });
         });
 
-        room.actions = { mafia: null, doctor: null, police: null, reporter: null, reporterSkipped: false };
+        room.actions = { mafia: {}, doctor: {}, police: {}, reporter: {}, reporterSkipped: {} };
         room.votes = {};
         room.cooldowns = {};
 
         io.to(roomId).emit('gameStarted', { status: room.status, players: room.players, cooldowns: room.cooldowns });
     });
 
-    // 5. 채팅 메커니즘 (인게임 밤 비밀회의/낮 토론 완벽 구현)
+    // 5. 채팅 메커니즘
     socket.on('sendMessage', ({ roomId, message, username, type }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -231,7 +249,6 @@ io.on('connection', (socket) => {
 
         if (type === 'game') {
             if (room.status === 'night') {
-                // 밤에는 마피아 진영끼리만 귓속말 형태(isSecret)로 전송
                 if (player.role === 'mafia' || player.role === 'chameleon') {
                     room.players.forEach(p => {
                         if (p.role === 'mafia' || p.role === 'chameleon') {
@@ -240,31 +257,50 @@ io.on('connection', (socket) => {
                     });
                 }
             } else {
-                if (player.isAlive) { // 생존자만 낮에 대화 가능
+                if (player.isAlive) {
                     io.to(roomId).emit('receiveMessage', { username, message, type, isSecret: false });
                 }
             }
         } else {
-            // 대기실 전체 채팅
             io.to(roomId).emit('receiveMessage', { username, message, type, isSecret: false });
         }
     });
 
-    // 6. 밤 상호작용 관련 액션 모음
+    // 6. 밤 상호작용 관련 액션 모음 (ID 개별 매핑 방식으로 수정)
     socket.on('mafiaAction', ({ roomId, targetId }) => {
-        if (rooms[roomId]) { rooms[roomId].actions.mafia = targetId; checkNightActionsComplete(rooms[roomId]); }
+        const room = rooms[roomId];
+        if (room && room.status === 'night') { 
+            room.actions.mafia[socket.id] = targetId; 
+            checkNightActionsComplete(room); 
+        }
     });
     socket.on('doctorAction', ({ roomId, targetId }) => {
-        if (rooms[roomId]) { rooms[roomId].actions.doctor = targetId; checkNightActionsComplete(rooms[roomId]); }
+        const room = rooms[roomId];
+        if (room && room.status === 'night') { 
+            room.actions.doctor[socket.id] = targetId; 
+            checkNightActionsComplete(room); 
+        }
     });
     socket.on('policeAction', ({ roomId, targetId }) => {
-        if (rooms[roomId]) { rooms[roomId].actions.police = targetId; checkNightActionsComplete(rooms[roomId]); }
+        const room = rooms[roomId];
+        if (room && room.status === 'night') { 
+            room.actions.police[socket.id] = targetId; 
+            checkNightActionsComplete(room); 
+        }
     });
     socket.on('reporterAction', ({ roomId, targetId }) => {
-        if (rooms[roomId]) { rooms[roomId].actions.reporter = targetId; checkNightActionsComplete(rooms[roomId]); }
+        const room = rooms[roomId];
+        if (room && room.status === 'night') { 
+            room.actions.reporter[socket.id] = targetId; 
+            checkNightActionsComplete(room); 
+        }
     });
     socket.on('reporterSkip', ({ roomId }) => {
-        if (rooms[roomId]) { rooms[roomId].actions.reporterSkipped = true; checkNightActionsComplete(rooms[roomId]); }
+        const room = rooms[roomId];
+        if (room && room.status === 'night') { 
+            room.actions.reporterSkipped[socket.id] = true; 
+            checkNightActionsComplete(room); 
+        }
     });
 
     // 7. 카멜레온 신분 절도 기능
@@ -295,7 +331,6 @@ io.on('connection', (socket) => {
 
         const alivePlayers = room.players.filter(p => p.isAlive);
         if (Object.keys(room.votes).length >= alivePlayers.length) {
-            // 모든 생존자 투표 완료 시 정산 진행
             const voteCounts = {};
             let maxVotes = 0;
             let mostVotedId = null;
@@ -316,7 +351,6 @@ io.on('connection', (socket) => {
                     executed.isAlive = false;
                     resultMessage = `주민들의 압도적인 의심을 받은 [ ${executed.username} ] 님이 단두대에서 처형되었습니다.`;
 
-                    // 제스터 승리 체크 (낮 처형 시 제스터 단독 승리)
                     if (executed.role === 'jester') {
                         io.to(room.id).emit('gameOver', { winner: 'jester', winnerName: executed.username });
                         delete rooms[room.id];
@@ -327,12 +361,10 @@ io.on('connection', (socket) => {
 
             if (checkWinConditions(room)) return;
 
-            // 기자 쿨다운 감소 차감
             Object.keys(room.cooldowns).forEach(id => { if (room.cooldowns[id] > 0) room.cooldowns[id]--; });
 
-            // 다시 밤 단계로 진입 및 초기화
             room.status = 'night';
-            room.actions = { mafia: null, doctor: null, police: null, reporter: null, reporterSkipped: false };
+            room.actions = { mafia: {}, doctor: {}, police: {}, reporter: {}, reporterSkipped: {} };
             room.votes = {};
 
             io.to(room.id).emit('nightStarted', { status: 'night', message: resultMessage, players: room.players, cooldowns: room.cooldowns });
@@ -348,7 +380,6 @@ io.on('connection', (socket) => {
                 const wasMaster = room.players[idx].isMaster;
                 room.players.splice(idx, 1);
                 
-                // 방장이 나갔을 때 다른 사람에게 방장 위임
                 if (wasMaster && room.players.length > 0) {
                     room.masterId = room.players[0].id;
                     room.players[0].isMaster = true;
